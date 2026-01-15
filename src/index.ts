@@ -10,7 +10,7 @@ switch (command) {
     case "init":
         console.log(colors.yellow("Executing createJson.ts..."));
         exec(
-            `node ${path.resolve(__dirname, "./commands/createJson.js")}`,
+            `node ${path.resolve(__dirname, "./commands/createJson")}`,
             (error, stdout, stderr) => {
                 if (error) {
                     console.error(colors.red(`Error: ${error.message}`));
@@ -28,7 +28,7 @@ switch (command) {
     case undefined:
         console.log(colors.yellow("Executing createIcon.ts..."));
         exec(
-            `node ${path.resolve(__dirname, "./commands/createIcon.js")}`,
+            `node ${path.resolve(__dirname, "./commands/createIcon")}`,
             (error, stdout, stderr) => {
                 if (error) {
                     console.error(colors.red(`Error: ${error.message}`));

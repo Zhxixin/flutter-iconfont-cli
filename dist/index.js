@@ -42,7 +42,7 @@ const command = args[0];
 switch (command) {
     case "init":
         console.log(colors.yellow("Executing createJson.ts..."));
-        (0, child_process_1.exec)(`node ${path.resolve(__dirname, "./commands/createJson.js")}`, (error, stdout, stderr) => {
+        (0, child_process_1.exec)(`node ${path.resolve(__dirname, "./commands/createJson")}`, (error, stdout, stderr) => {
             if (error) {
                 console.error(colors.red(`Error: ${error.message}`));
                 return;
@@ -56,7 +56,7 @@ switch (command) {
         break;
     case undefined:
         console.log(colors.yellow("Executing createIcon.ts..."));
-        (0, child_process_1.exec)(`node ${path.resolve(__dirname, "./commands/createIcon.js")}`, (error, stdout, stderr) => {
+        (0, child_process_1.exec)(`node ${path.resolve(__dirname, "./commands/createIcon")}`, (error, stdout, stderr) => {
             if (error) {
                 console.error(colors.red(`Error: ${error.message}`));
                 return;

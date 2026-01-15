@@ -134,8 +134,16 @@ IconFont(IconNames.alipay, colors: ['green', 'orange'],matchTextDirection:true);
 
 ///如果项目中的iconfont-cli 无法满足你 的需求，可以修改配置后
 安装打包的安装包 npm install -g pkg
+npm install
 执行 npm run build
 打包 pkg . --output iconfont-cli  
 
-
-
+  // "scripts": {
+  //   "build": "tsc && cpx \"src/templates/*\" dist/templates",
+  //   "start": "node dist/index.js"
+  // },
+webpack使用
+  "scripts": {
+    "build": "webpack",
+    "start": "node build/bundle.js"
+  },
