@@ -1,13 +1,5 @@
-## flutter-iconfont-cli
-用纯JS把iconfont.cn的图标转换成Flutter Widget，不依赖字体，支持多色彩
 
-## 特性
-
-1、纯组件，不依赖字体，体积小
-<br />
-2、支持渲染多色彩图标，支持自定义颜色
-<br />
-3、自动化生成图标组件
+自动化生成图标组件
 
 ## Step 1
 
@@ -50,7 +42,7 @@ flutter packages get
 ```
 ### 配置参数说明：
 ### symbol_url
-请直接复制[iconfont](http://iconfont.cn)官网提供的项目链接。请务必看清是`.js`后缀而不是.css后缀。如果你现在还没有创建iconfont的仓库，那么可以填入这个链接去测试：`http://at.alicdn.com/t/font_1373348_ghk94ooopqr.js`
+请直接复制[iconfont](http://iconfont.cn)官网提供的项目链接。请务必看清是`.js`后缀而不是.css后缀。
 
 <br />
 
@@ -97,16 +89,12 @@ class App extends StatelessWidget {
     }
 }
 ```
-![](https://github.com/fwh1990/flutter-iconfont-cli/blob/master/images/default-color-icon.png?raw=true)
-### 图标单色
-单色图标，如果不指定颜色值，图标将渲染原本的颜色。如果你想设置为其他的颜色，那么设置一个你想要的颜色即可。
 
 **注意：如果你在props传入的color是字符串而不是数组，那么即使原本是多色彩的图标，也会变成单色图标。**
 
 ```dart
 IconFont(IconNames.alipay, color: 'red');
 ```
-![](https://github.com/fwh1990/flutter-iconfont-cli/blob/master/images/one-color-icon.png?raw=true)
 
 ### 图标多色彩
 多色彩的图标，如果不指定颜色值，图标将渲染原本的多色彩。如果你想设置为其他的颜色，那么设置一组你想要的颜色即可
@@ -126,13 +114,21 @@ IconFont(IconNames.alipay, colors: ['green', 'orange'],matchTextDirection:true);
 ```
 
 # 更新图标
-当您在iconfont.cn中的图标有变更时，只需更改配置`symbol_url`，然后再次执行`Step 3`即可生成最新的图标组件
+当您在iconfont.cn 中的图标有变更时，只需更改配置`symbol_url`，然后再次执行`Step 3`即可生成最新的图标组件
 ```bash
 # 修改 symbol_url 配置后执行：
 执行./iconfont-cli  生成图标文件
 ```
+# 如果 iconfont-cli.exe 生成的图标路径不符合预期（被 Iconfont 优化路径等），请按以下步骤强制使用本地文件：
+- 
+- 改名：重命名 SVG，文件名必须与 Iconfont 网站上的图标 ID 严格一致。
+  - 例子：在icon_font.dart文件看到的id是exhaust_fan -> 文件名改为 icon-exhaust_fan.svg
+- 覆盖：放入和iconfont.json同目录下的 assets/replace_iconfont_svg 文件夹
+```bash
+执行./iconfont-cli  生成图标文件
+```
 
-///如果项目中的iconfont-cli 无法满足你 的需求，可以修改配置后
+# 如果项目中的iconfont-cli 无法满足你 的需求，可以修改配置后
 安装打包的安装包 npm install -g pkg
 npm install
 执行 npm run build
