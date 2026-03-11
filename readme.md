@@ -133,12 +133,12 @@ IconFont(IconNames.alipay, colors: ['green', 'orange'],matchTextDirection:true);
 npm install
 执行 npm run build
 打包 pkg . --output iconfont-cli  
-
-  // "scripts": {
-  //   "build": "tsc && cpx \"src/templates/*\" dist/templates",
-  //   "start": "node dist/index.js"
-  // },
-webpack使用
+# mac 电脑使用这句配置 package.json
+  "scripts": {
+    "build": "tsc && cpx \"src/templates/*\" dist/templates",
+    "start": "node dist/index.js"
+  },
+ # window如何无法正常运行，使用webpack
   "scripts": {
     "build": "webpack",
     "start": "node build/bundle.js"

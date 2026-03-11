@@ -31,7 +31,7 @@ export const generateComponent = async (data: XmlData, config: Config) => {
   const names: string[] = [];
   const saveDir = path.resolve(config.save_dir);
   
-  // 本地 SVG 路径 (请确保这个路径是对的)
+  // 本地 SVG 路径
   const localSvgDir = path.join(process.cwd(), 'assets', 'replace_iconfont_svg');
 
   console.log(colors.blue('-------------------------------------------------------'));
@@ -44,24 +44,43 @@ export const generateComponent = async (data: XmlData, config: Config) => {
   mkdirp.sync(saveDir);
   glob.sync(path.join(saveDir, '*')).forEach((file) => fs.unlinkSync(file));
 
+  // 1. 获取所有本地 SVG 文件列表，并创建一个集合来记录已处理的文件
+  let allLocalFiles: string[] = [];
+  const processedLocalFiles = new Set<string>(); 
+
+  if (fs.existsSync(localSvgDir)) {
+      allLocalFiles = fs.readdirSync(localSvgDir).filter(file => file.toLowerCase().endsWith('.svg'));
+  }
+
+  // Helper: 处理 Icon ID 的命名规范
+  const processIconId = (rawId: string) => {
+      let trimmed = snakeCase(config.trim_icon_prefix
+        ? rawId.replace(new RegExp(`^${config.trim_icon_prefix}(.+?)$`), '$1')
+        : rawId);
+      if (/^\d/.test(trimmed)) {
+        trimmed = '_' + trimmed;
+      }
+      return trimmed;
+  };
+
+  // ==========================================
+  // 阶段一：遍历 Iconfont 数据
+  // ==========================================
   for (const item of data.svg.symbol) {
     const iconId = item.$.id;
-    let iconIdAfterTrim = snakeCase(config.trim_icon_prefix
-      ? iconId.replace(new RegExp(`^${config.trim_icon_prefix}(.+?)$`), '$1')
-      : iconId);
-
-    if (/^\d/.test(iconIdAfterTrim)) {
-      iconIdAfterTrim = '_' + iconIdAfterTrim;
-    }
+    const iconIdAfterTrim = processIconId(iconId);
 
     names.push(iconIdAfterTrim);
 
     // 智能查找本地文件
-    let targetFilePath = path.join(localSvgDir, `${iconId}.svg`);
+    let targetFileName = `${iconId}.svg`;
+    let targetFilePath = path.join(localSvgDir, targetFileName);
     let matchType = 'Exact Match';
 
+    // 尝试去前缀匹配
     if (!fs.existsSync(targetFilePath)) {
-        targetFilePath = path.join(localSvgDir, `${iconIdAfterTrim}.svg`);
+        targetFileName = `${iconIdAfterTrim}.svg`;
+        targetFilePath = path.join(localSvgDir, targetFileName);
         matchType = 'Trimmed Match';
     }
 
@@ -69,8 +88,9 @@ export const generateComponent = async (data: XmlData, config: Config) => {
 
     if (fs.existsSync(targetFilePath)) {
       try {
+        processedLocalFiles.add(targetFileName);
+
         const localContent = fs.readFileSync(targetFilePath, 'utf-8');
-        // 解析本地 SVG (保留顺序)
         const parsedLocal = await parseStringPromise(localContent, { 
             explicitArray: true,
             explicitChildren: true,
@@ -78,14 +98,13 @@ export const generateComponent = async (data: XmlData, config: Config) => {
         });
         
         if (parsedLocal.svg) {
-            console.log(colors.yellow(`[Local Override] Using local file (${matchType}): ${path.basename(targetFilePath)}`));
+            console.log(colors.yellow(`[Local Override] Using local file (${matchType}): ${targetFileName}`));
             svgDataToRender = {
                 ...parsedLocal.svg, 
                 $: {
                     ...item.$, 
                     viewBox: parsedLocal.svg.$.viewBox || item.$.viewBox 
                 },
-                // 保留 $$ (子节点顺序数组)
                 $$: parsedLocal.svg.$$ 
             };
         }
@@ -103,6 +122,63 @@ export const generateComponent = async (data: XmlData, config: Config) => {
     stringToEnumCases += `${whitespace(8)}break;\n`;
   }
 
+  // ==========================================
+  // 阶段二：处理新增的本地 SVG
+  // ==========================================
+  const newIcons = allLocalFiles.filter(file => !processedLocalFiles.has(file));
+  
+  if (newIcons.length > 0) {
+      console.log(colors.green(`-------------------------------------------------------`));
+      console.log(colors.green(`[Info] Found ${newIcons.length} new icons in local folder:`));
+  }
+
+  for (const fileName of newIcons) {
+      const rawId = path.parse(fileName).name; 
+      const iconIdAfterTrim = processIconId(rawId);
+
+      if (names.includes(iconIdAfterTrim)) {
+          console.warn(colors.yellow(`[Warn] Skipping duplicate icon name: ${iconIdAfterTrim} (${fileName})`));
+          continue;
+      }
+
+      names.push(iconIdAfterTrim);
+      console.log(colors.green(`  + Adding new icon: ${iconIdAfterTrim}`));
+
+      const targetFilePath = path.join(localSvgDir, fileName);
+      try {
+          const localContent = fs.readFileSync(targetFilePath, 'utf-8');
+          const parsedLocal = await parseStringPromise(localContent, { 
+              explicitArray: true,
+              explicitChildren: true,
+              preserveChildrenOrder: true 
+          });
+
+          if (parsedLocal.svg) {
+              const svgDataToRender = {
+                  ...parsedLocal.svg,
+                  $: {
+                      viewBox: parsedLocal.svg.$.viewBox || '0 0 1024 1024'
+                  },
+                  $$: parsedLocal.svg.$$
+              };
+
+              cases += `${whitespace(6)}case IconNames.${iconIdAfterTrim}:\n`;
+              cases += `${whitespace(8)}svgXml = '''${generateCase(svgDataToRender, 10)}''';\n`;
+              cases += `${whitespace(8)}break;\n`;
+
+              stringToEnumCases += `${whitespace(6)}case '${iconIdAfterTrim}':\n`;
+              stringToEnumCases += `${whitespace(8)}iconName = IconNames.${iconIdAfterTrim};\n`;
+              stringToEnumCases += `${whitespace(8)}break;\n`;
+          }
+      } catch (e) {
+          console.error(colors.red(`[Error] Failed to parse new local SVG: ${fileName}`), e);
+      }
+  }
+
+  if (newIcons.length > 0) {
+    console.log(colors.green(`-------------------------------------------------------`));
+  }
+
   let iconFile = getTemplate(config.null_safety ? 'Icon.null.safety.dart' : 'Icon.dart');
 
   iconFile = replaceSize(iconFile, config.default_icon_size);
@@ -116,11 +192,11 @@ export const generateComponent = async (data: XmlData, config: Config) => {
 };
 
 const generateCase = (data: any, baseIdent: number) => {
-  let template = `\n${whitespace(baseIdent)}<svg viewBox="${data.$.viewBox}" xmlns="http://www.w3.org/2000/svg">\n`;
-  // 如果有 defs，先生成 defs
+  // 【关键修改】在根节点增加 opacity="$opacity" 和 shape-rendering="geometricPrecision"
+  let template = `\n${whitespace(baseIdent)}<svg viewBox="${data.$.viewBox}" xmlns="http://www.w3.org/2000/svg" opacity="$opacity" shape-rendering="geometricPrecision">\n`;
+  
   if (data.defs) {
-      // 简单处理 defs，通常包含 clipPath
-      // 这里省略复杂 defs 递归，如有需要可扩展
+      // defs 处理
   }
 
   const context: Context = {
@@ -135,11 +211,10 @@ const generateCase = (data: any, baseIdent: number) => {
   return template;
 };
 
-// 递归渲染函数 (严格顺序)
+// 递归渲染函数
 const renderNodes = (node: any, ident: number, context: Context): string => {
   let output = '';
 
-  // 1. 优先处理有序子节点 $$
   if (node.$$) {
     node.$$.forEach((child: any) => {
       const domName = child['#name'];
@@ -148,7 +223,6 @@ const renderNodes = (node: any, ident: number, context: Context): string => {
     return output;
   }
 
-  // 2. 回退处理
   for (const domName of Object.keys(node)) {
     if (domName === '$' || domName === '$$') continue; 
     const nodes = Array.isArray(node[domName]) ? node[domName] : [node[domName]];
@@ -161,31 +235,26 @@ const renderNodes = (node: any, ident: number, context: Context): string => {
 };
 
 const processSingleNode = (domName: string, subNode: any, ident: number, context: Context) => {
-    // 过滤不支持的标签
     if (!ATTRIBUTE_FILL_MAP.includes(domName)) return '';
 
     let html = '';
     
-    // 处理 Group <g>
     if (domName === 'g') {
         html += `${whitespace(ident)}<g${addAttribute(domName, subNode, context, ident)}>\n`;
         html += renderNodes(subNode, ident + 2, context); 
         html += `${whitespace(ident)}</g>\n`;
     } 
-    // 处理 ClipPath / Defs (如果有)
     else if (domName === 'defs' || domName === 'clipPath') {
          html += `${whitespace(ident)}<${domName}${addAttribute(domName, subNode, context, ident)}>\n`;
          html += renderNodes(subNode, ident + 2, context);
          html += `${whitespace(ident)}</${domName}>\n`;
     }
-    // 处理常规形状
     else {
         html += `${whitespace(ident)}<${domName}${addAttribute(domName, subNode, context, ident)} />\n`;
     }
     return html;
 }
 
-// 解析 style 字符串为对象
 const parseStyle = (styleStr: string): any => {
     const styleObj: any = {};
     if (!styleStr) return styleObj;
@@ -206,39 +275,32 @@ const addAttribute = (domName: string, sub: any, context: Context, currentIdent:
   if (sub && sub.$) {
     let attributes = sub.$ as any; 
     
-    // 合并 style 中的属性到 attributes
+    // 1. 合并 style 中的属性
     if (attributes.style) {
         const styleAttrs = parseStyle(attributes.style);
         attributes = { ...attributes, ...styleAttrs };
-        delete attributes.style; // 处理完后删除 style 属性
+        delete attributes.style; 
     }
 
-    // 如果标签没有 fill 也没有 stroke，给一个默认 fill
-    // 这样能确保 getColor 逻辑被触发，从而让生成的 Icon 能响应 color 参数
-    // 排除 g, defs, clipPath 等容器标签，只针对形状标签
+    // 2. 无色填充逻辑
     const nonShapeTags = ['g', 'defs', 'clipPath', 'linearGradient', 'stop', 'mask'];
     if (!nonShapeTags.includes(domName)) {
         if (!attributes.fill && !attributes.stroke) {
-            // 给定默认颜色，后续循环会检测到这个属性并生成 getColor 代码
             attributes.fill = '#333333'; 
         }
     }
 
     const ignoreAttrs = ['id', 'class', 'data-name', 'xmlns', 'xmlns:xlink']; 
-
-    // 如果没有 fill/stroke，设置默认 (防止透明)
-    // 但如果有了 opacity，就不强制设置了
     
-    // 必须添加的基础属性
-    if (!attributes['fill-opacity']) template += `\n${whitespace(currentIdent + 2)}fill-opacity="$opacity"`;
-    if (!attributes['stroke-opacity']) template += `\n${whitespace(currentIdent + 2)}stroke-opacity="$opacity"`;
+    // 【关键变量】标记是否已经包含 fill-rule
+    let hasFillRule = false; 
 
     for (const attributeName of Object.keys(attributes)) {
       if (ignoreAttrs.includes(attributeName)) continue;
 
       const attrValue = attributes[attributeName];
 
-      // 处理颜色 (fill 或 stroke)
+      // 处理颜色 (无白色保护，全部 map)
       if (attributeName === 'fill' || attributeName === 'stroke') {
         if (!attrValue || attrValue.toLowerCase() === 'none') {
           template += `\n${whitespace(currentIdent + 2)}${attributeName}="${attrValue}"`;
@@ -252,22 +314,29 @@ const addAttribute = (domName: string, sub: any, context: Context, currentIdent:
           template += `\n${whitespace(currentIdent + 2)}${attributeName}="''' + getColor(${idx}, color, colors, '${attrValue}') + '''"`;
         }
       } 
-      // 处理透明度 (opacity -> fill-opacity / stroke-opacity)
-      // SVG 的 opacity 属性会同时影响 fill 和 stroke
-      else if (attributeName === 'opacity') {
-         // 这里我们简单处理，把 opacity 赋给 fill-opacity，配合上面的 $opacity 变量
-         // 注意：Flutter SVG 可能需要特殊的处理，这里直接透传
+      // 处理透明度 (保留原值)
+      else if (attributeName === 'opacity' || attributeName === 'fill-opacity' || attributeName === 'stroke-opacity') {
          template += `\n${whitespace(currentIdent + 2)}${attributeName}="${attrValue}"`;
       }
-      // 直接透传 transform, clip-path 等
+      // 【关键逻辑】检测原图是否自带 fill-rule
+      else if (attributeName === 'fill-rule') {
+         hasFillRule = true; // 标记已存在
+         template += `\n${whitespace(currentIdent + 2)}${attributeName}="${attrValue}"`;
+      }
+      // 其他属性透传
       else {
         template += `\n${whitespace(currentIdent + 2)}${attributeName}="${attrValue}"`;
       }
     }
-    template+=` fill-rule="evenodd"`;
+    
+    // 3. 【智能填充规则】只有当原图没有 fill-rule 时，才补充 evenodd
+    if (!hasFillRule) {
+        template+=` fill-rule="evenodd"`;
+    }
+
   } else {
-      // 没有任何属性时，补充基础 opacity
-      template += `\n${whitespace(currentIdent + 2)}fill-opacity="$opacity" fill-rule="evenodd" stroke-opacity="$opacity"`;
+      // 没有任何属性时，默认补充 fill-rule
+      template += `\n${whitespace(currentIdent + 2)}fill-rule="evenodd"`;
   }
 
   return template;
